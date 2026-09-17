@@ -6,7 +6,7 @@ Run with:
     /home/kshitij/anaconda3/envs/projects/bin/python analysis/main.py
 
 This tool only reads CSVs and writes plain-text summaries to
-analysis-results/results.txt. It never modifies the source dataset, trains a
+analysis-results/analysis.txt. It never modifies the source dataset, trains a
 model, engineers features, or makes any modeling decisions.
 """
 
@@ -19,8 +19,8 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
 CORE_DIR = BASE_DIR / "core"
-DATASET_DIR = BASE_DIR.parent / "dataset"
-RESULTS_FILE = BASE_DIR.parent / "analysis-results" / "results.txt"
+DATASET_DIR = BASE_DIR / "dataset"
+RESULTS_DIR = BASE_DIR / "analysis_results"
 
 # Make the analysis modules in core/ importable regardless of the working
 # directory the script is launched from.
@@ -40,18 +40,20 @@ target_analysis = importlib.import_module("4_target_analysis")
 temporal_analysis = importlib.import_module("7_temporal_analysis")
 import utils
 
-ANALYSES = [
+analysis = [
     ("Dataset Overview", overview.run),
     ("Data Quality", data_quality.run),
     ("Feature Profile", feature_profile.run),
-    ("Target / Fraud Analysis", target_analysis.run),
-    ("Categorical Analysis", categorical_analysis.run),
-    ("Numeric Analysis", numeric_analysis.run),
-    ("Temporal Analysis", temporal_analysis.run),
+    ("Target / Fraud analysis", target_analysis.run),
+    ("Categorical analysis", categorical_analysis.run),
+    ("Numeric analysis", numeric_analysis.run),
+    ("Temporal analysis", temporal_analysis.run),
     ("Fraud Relationships", fraud_relationships.run),
-    ("Outlier Analysis", outlier_analysis.run),
+    ("Outlier analysis", outlier_analysis.run),
     ("Leakage Checks", leakage_checks.run),
 ]
+
+COMBINED_analysis_LABEL = "Run All analysis (1-10) and Save Combined Output"
 
 
 def select_dataset() -> Path | None:
@@ -68,6 +70,7 @@ def select_dataset() -> Path | None:
 
     while True:
         print("\nAvailable datasets:")
+        print()
         for i, path in enumerate(files, start=1):
             print(f"  {i}. {path.name}")
         print("  0. Exit")
@@ -81,21 +84,25 @@ def select_dataset() -> Path | None:
         return files[int(choice) - 1]
 
 
-def select_analysis():
-    """Show the analysis menu. Returns (label, func) or None to go back."""
+def select_analysis() -> tuple[str, callable] | None:
+    """Show the analysis menu. Returns (label, func) or None to go back.
+
+    Option 0 runs all analysis (1-10) and saves combined output.
+    """
     while True:
-        print("\nAvailable analyses:")
-        for i, (label, _) in enumerate(ANALYSES, start=1):
+        print("\nAvailable analysis:")
+        print()
+        print(f"  0. {COMBINED_analysis_LABEL}")
+        for i, (label, _) in enumerate(analysis, start=1):
             print(f"  {i}. {label}")
-        print("  0. Back to dataset selection")
 
         choice = input("\nSelect an analysis: ").strip()
         if choice == "0":
-            return None
-        if not choice.isdigit() or not (1 <= int(choice) <= len(ANALYSES)):
+            return (COMBINED_analysis_LABEL, _run_all_analysis)
+        if not choice.isdigit() or not (1 <= int(choice) <= len(analysis)):
             print("Invalid choice - enter a number from the list.")
             continue
-        return ANALYSES[int(choice) - 1]
+        return analysis[int(choice) - 1]
 
 
 def run_analysis(label: str, func, csv_path: Path) -> str | None:
@@ -111,28 +118,25 @@ def run_analysis(label: str, func, csv_path: Path) -> str | None:
     except KeyError as exc:
         print(f"[Error] {exc}")
     except Exception as exc:  # noqa: BLE001 - keep the CLI alive on any analysis bug
-        print(f"[Error] Analysis failed unexpectedly: {exc}")
+        print(f"[Error] analysis failed unexpectedly: {exc}")
     return None
 
 
 def ensure_results_file() -> None:
-    RESULTS_FILE.parent.mkdir(parents=True, exist_ok=True)
-    if not RESULTS_FILE.exists():
-        RESULTS_FILE.touch()
+    RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 
-def save_result(text: str, dataset_name: str, analysis_label: str) -> None:
-    ensure_results_file()
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+def save_result(text: str, dataset_name: str, analysis_label: str, session_timestamp: str) -> None:
     entry = (
         f"\n{'#' * 70}\n"
-        f"# {timestamp} | dataset={dataset_name} | analysis={analysis_label}\n"
+        f"# {datetime.now().strftime('%Y-%m-%d %H:%M:%S')} | dataset={dataset_name} | analysis={analysis_label}\n"
         f"{'#' * 70}\n"
         f"{text}\n"
     )
-    with open(RESULTS_FILE, "a", encoding="utf-8") as fh:
+    analysis_file = RESULTS_DIR / f"analysis_{session_timestamp}.txt"
+    with open(analysis_file, "a", encoding="utf-8") as fh:
         fh.write(entry)
-    print(f"\nSaved to {RESULTS_FILE}")
+    print(f"\nAppended to {analysis_file}")
 
 
 def prompt_yes_no(question: str) -> bool:
@@ -145,10 +149,28 @@ def prompt_yes_no(question: str) -> bool:
         print("Please answer y or n.")
 
 
+def _run_all_analysis(csv_path_str: str) -> str | None:
+    """Run all 10 analysis in sequence and return combined output."""
+    csv_path = Path(csv_path_str)
+    combined_parts: list[str] = []
+    for label, func in analysis:
+        print(f"\n{'=' * 60}")
+        print(f"Running: {label} on {csv_path.name} ...")
+        print(f"{'=' * 60}")
+        result = run_analysis(label, func, csv_path)
+        if result is not None:
+            combined_parts.append(f"\n{'#' * 70}\n# {label}\n{'#' * 70}\n{result}")
+        else:
+            combined_parts.append(f"\n{'#' * 70}\n# {label}\n{'#' * 70}\n[analysis failed or returned no output]")
+    return "\n".join(combined_parts)
+
+
 def main() -> None:
-    print("Fraud & Risk Intelligence - Dataset Analysis CLI")
+    print("Fraud & Risk Intelligence - Dataset analysis CLI")
     print(f"Dataset directory: {DATASET_DIR}")
     ensure_results_file()
+
+    session_timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
     while True:
         dataset_path = select_dataset()
@@ -166,10 +188,21 @@ def main() -> None:
             if result is None:
                 continue  # error already printed - stay on the analysis menu
 
-            print(f"\n{result}\n")
-
-            if prompt_yes_no("Append this result to results.txt?"):
-                save_result(result, dataset_path.name, label)
+            if label == COMBINED_analysis_LABEL:
+                # Save combined output to a timestamped txt file
+                combined_timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                combined_file = RESULTS_DIR / f"analysis_{combined_timestamp}.txt"
+                with open(combined_file, "w", encoding="utf-8") as fh:
+                    fh.write(f"analysis Report\n")
+                    fh.write(f"Dataset: {dataset_path.name}\n")
+                    fh.write(f"Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+                    fh.write(f"{'#' * 70}\n\n")
+                    fh.write(result)
+                print(f"\nCombined output saved to: {combined_file}")
+            else:
+                print(f"\n{result}\n")
+                if prompt_yes_no("Save this analysis to a file?"):
+                    save_result(result, dataset_path.name, label, session_timestamp)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ import pandas as pd
 TARGET_COLUMN = "fraud_bool"
 
 # Whole-word tokens (split on non-alphanumerics) that suggest a temporal
-#/period column. Matched as whole tokens, not substrings, so "month"
+# or period column. Matched as whole tokens, not substrings, so "month"
 # doesn't also match inside "prev_address_months_count".
 _TEMPORAL_TOKENS = {
     "month", "months", "date", "dates", "day", "days",
@@ -37,6 +37,7 @@ TEMPORAL_MAX_CARDINALITY = 60
 CATEGORICAL_UNIQUE_THRESHOLD = 20
 
 
+# Returns all .csv files directly inside dataset_dir, sorted by filename.
 def discover_csv_files(dataset_dir: Path) -> list[Path]:
     """Return all .csv files directly inside dataset_dir, sorted by name."""
     if not dataset_dir.exists():
@@ -50,6 +51,7 @@ def discover_csv_files(dataset_dir: Path) -> list[Path]:
     return files
 
 
+# Reads only the header row of a CSV to get column names (cheap, avoids full file load).
 def get_columns(csv_path: Path) -> list[str]:
     """Read only the header row - cheap even for a huge file."""
     try:
@@ -59,6 +61,7 @@ def get_columns(csv_path: Path) -> list[str]:
     return list(header.columns)
 
 
+# Counts data rows in a CSV by plain line count without loading into pandas (memory-efficient for large files).
 def count_rows_fast(csv_path: Path) -> int:
     """
     Count data rows without ever loading the file into pandas.
@@ -71,6 +74,7 @@ def count_rows_fast(csv_path: Path) -> int:
     return max(total_lines - 1, 0)  # minus header row
 
 
+# Reads a small sample of rows from a CSV for dtype inference and column typing only.
 def read_sample(csv_path: Path, n: int = 5000) -> pd.DataFrame:
     """Small sample used for dtype inference / column typing - never the full file."""
     try:
@@ -79,9 +83,10 @@ def read_sample(csv_path: Path, n: int = 5000) -> pd.DataFrame:
         raise ValueError(f"Could not read a sample of {csv_path.name}: {exc}") from exc
 
 
+# Downcasts numeric columns and converts low-cardinality text columns to 'category' to reduce memory usage.
 def optimize_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Downcast numeric columns and convert low-cardinality object columns to
+    Downcast numeric columns and convert low-cardinality text columns to
     'category' in place, to keep memory reasonable on wide/tall CSVs.
     """
     for col in df.columns:
@@ -92,13 +97,14 @@ def optimize_dtypes(df: pd.DataFrame) -> pd.DataFrame:
             df[col] = pd.to_numeric(df[col], downcast="integer")
         elif pd.api.types.is_float_dtype(col_dtype):
             df[col] = pd.to_numeric(df[col], downcast="float")
-        elif col_dtype == object:
+        elif pd.api.types.is_string_dtype(col_dtype):
             nunique = df[col].nunique(dropna=True)
             if nunique and len(df) and nunique / len(df) < 0.5:
                 df[col] = df[col].astype("category")
     return df
 
 
+# Reads a CSV with an optional column subset, then applies memory-friendly dtype optimization.
 def read_full(csv_path: Path, usecols: Iterable[str] | None = None) -> pd.DataFrame:
     """
     Read a CSV with an optional column subset, then apply memory-friendly
@@ -114,10 +120,12 @@ def read_full(csv_path: Path, usecols: Iterable[str] | None = None) -> pd.DataFr
     return optimize_dtypes(df)
 
 
+# Returns True if the fraud_bool target column is present in the given column list.
 def has_target(columns: Iterable[str]) -> bool:
     return TARGET_COLUMN in set(columns)
 
 
+# Builds a formatted message explaining that the target column was not found and the analysis is skipped.
 def missing_target_message(section_title: str) -> str:
     return (
         f"{section(section_title)}\n"
@@ -126,6 +134,7 @@ def missing_target_message(section_title: str) -> str:
     )
 
 
+# Heuristically splits feature columns into categorical/discrete vs continuous numeric lists.
 def identify_categorical_numeric(
     df: pd.DataFrame,
     exclude: Iterable[str] = (),
@@ -148,7 +157,7 @@ def identify_categorical_numeric(
         if (
             pd.api.types.is_bool_dtype(series)
             or series.dtype.name == "category"
-            or series.dtype == object
+            or pd.api.types.is_string_dtype(series)
         ):
             categorical.append(col)
         elif pd.api.types.is_numeric_dtype(series):
@@ -162,6 +171,7 @@ def identify_categorical_numeric(
     return categorical, numeric
 
 
+# Identifies column names that plausibly hold time/period information based on naming tokens and cardinality.
 def detect_temporal_columns(
     columns: Iterable[str],
     sample: pd.DataFrame | None = None,
@@ -196,15 +206,18 @@ def detect_temporal_columns(
     return filtered
 
 
+# Returns a percentage string (e.g. "45.23%") for part out of whole, guarding against division by zero.
 def pct(part: float, whole: float) -> str:
     if not whole:
         return "0.00%"
     return f"{(part / whole) * 100:.2f}%"
 
 
+# Returns a horizontal divider string of the given character and width for text formatting.
 def divider(char: str = "-", width: int = 60) -> str:
     return char * width
 
 
+# Returns a formatted section header with title and an underline divider for report readability.
 def section(title: str) -> str:
     return f"\n{title}\n{divider('=', len(title))}"

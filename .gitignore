@@ -3,3 +3,6 @@ __pycache__/
 .conda-env/
 .pytest_cache/
 dataset/
+analysis-results/
+analysis/analysis-results/
+analysis/analysis_results/
