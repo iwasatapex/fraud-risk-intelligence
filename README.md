@@ -101,9 +101,13 @@ fraud-risk-intelligence/
 │   │   ├── 8_fraud_relationships.py
 │   │   ├── 9_outlier_analysis.py
 │   │   └── 10_leakage_checks.py
-│   ├── dataset/             # Place CSV files here
-│   └── analysis_results/    # Output files (gitignored)
-├── dataset/                 # Alternative dataset location (gitignored)
+│   ├── dataset/             # CSV files for analysis
+│   ├── analysis_results/    # Output files (gitignored)
+│   └── pytest/              # Test files
+│       ├── conftest.py
+│       ├── test_main.py
+│       ├── test_utils.py
+│       └── test_*.py        # Tests for each analysis module
 ├── .gitignore
 └── README.md
 ```
