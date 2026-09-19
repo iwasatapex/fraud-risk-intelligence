@@ -3,11 +3,11 @@ import importlib
 import main
 
 def test_analysis_registry_has_all_ten_entries():
-    assert len(main.ANALYSES)==10
-    assert [label for label,_ in main.ANALYSES] == [
-        "Dataset Overview","Data Quality","Feature Profile","Target / Fraud Analysis",
-        "Categorical Analysis","Numeric Analysis","Temporal Analysis","Fraud Relationships",
-        "Outlier Analysis","Leakage Checks"]
+    assert len(main.analysis)==10
+    assert [label for label,_ in main.analysis] == [
+        "Dataset Overview","Data Quality","Feature Profile","Target / Fraud analysis",
+        "Categorical analysis","Numeric analysis","Temporal analysis","Fraud Relationships",
+        "Outlier analysis","Leakage Checks"]
 
 def test_select_dataset_exit_and_selection(monkeypatch,tmp_path):
     dataset=tmp_path/"dataset"; dataset.mkdir()
@@ -33,7 +33,7 @@ def test_select_analysis(monkeypatch):
     label,func=main.select_analysis(); assert label=="Dataset Overview" and callable(func)
     monkeypatch.setattr("builtins.input",lambda _:"0")
     label,func=main.select_analysis()
-    assert label==main.COMBINED_ANALYSIS_LABEL
+    assert label==main.COMBINED_analysis_LABEL
     assert callable(func)
 
 def test_run_analysis_success_and_missing(capsys,tmp_path):
@@ -45,7 +45,7 @@ def test_run_analysis_success_and_missing(capsys,tmp_path):
 
 def test_run_analysis_error_handlers(capsys,tmp_path):
     p=tmp_path/"x.csv"; p.write_text("x\n1\n")
-    for exc,msg in [(ValueError("bad"),"Could not read this CSV"),(KeyError("x"),"'x'"),(RuntimeError("boom"),"Analysis failed unexpectedly")]:
+    for exc,msg in [(ValueError("bad"),"Could not read this CSV"),(KeyError("x"),"'x'"),(RuntimeError("boom"),"analysis failed unexpectedly")]:
         assert main.run_analysis("Test",lambda _:(_ for _ in ()).throw(exc),p) is None
         assert msg in capsys.readouterr().out
 
@@ -54,9 +54,9 @@ def test_ensure_results_file(tmp_path,monkeypatch):
     main.ensure_results_file(); assert (tmp_path/"nested").exists()
     main.ensure_results_file(); assert (tmp_path/"nested").exists()
 
-def test_save_result_appends_to_analyses_file(tmp_path,monkeypatch,capsys):
+def test_save_result_appends_to_analysis_file(tmp_path,monkeypatch,capsys):
     monkeypatch.setattr(main,"RESULTS_DIR",tmp_path)
-    f=tmp_path/"analyses_2026-01-01_12-00-00.txt"
+    f=tmp_path/"analysis_2026-01-01_12-00-00.txt"
     main.save_result("RESULT","Base.csv","Dataset Overview","2026-01-01_12-00-00")
     main.save_result("RESULT2","Base.csv","Data Quality","2026-01-01_12-00-00")
     text=f.read_text()
