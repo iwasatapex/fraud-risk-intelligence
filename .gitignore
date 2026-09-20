@@ -6,3 +6,8 @@ dataset/
 analysis-results/
 analysis/analysis-results/
 analysis/analysis_results/
+rule.md
+environment.yml
+new-mcp-server-1.yaml
+new-rule.md
+settings.json
