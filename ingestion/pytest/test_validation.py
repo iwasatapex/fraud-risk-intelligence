@@ -158,3 +158,19 @@ def test_assert_required_columns():
 def test_non_mapping_record_is_rejected():
     with pytest.raises(ValidationError, match="Expected a mapping"):
         validate_record(["not", "a", "mapping"])
+
+
+def test_to_number_robust_string_cleaning():
+    """Formatted numbers are cleaned; malformed strings are rejected."""
+    assert to_number("$1,234.50", field_name="amount") == 1234.5
+    assert to_number("\u20ac2,500.00", field_name="amount") == 2500.0
+    assert to_number("- $5,000.00", field_name="amount") == -5000.0
+    assert to_number("12345", field_name="amount") == 12345.0
+    assert to_number("500", field_name="amount") == 500.0
+
+    for malformed in ("12abc34", "abc123", "1.2.3", "1-2", "1,2,3", "abc-xyz", "nan", "inf"):
+        with pytest.raises(ValidationError, match="could not be reliably converted to a number"):
+            to_number(malformed, field_name="amount")
+
+    with pytest.raises(ValidationError, match="Cannot convert empty string"):
+        to_number("   ", field_name="amount")

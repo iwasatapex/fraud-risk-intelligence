@@ -56,6 +56,12 @@ _CURRENCY_SYMBOLS = ("$", "\u20ac", "\u00a3", "\u00a5")
 _CARD_LAST4_PATTERN = re.compile(r"\d{4}")
 _CURRENCY_PATTERN = re.compile(r"[A-Z]{3}")
 
+#: Shape of a number once currency symbols and whitespace are removed: optional
+#: sign, digits with optional correctly grouped thousands separators, optional
+#: decimal part. Anything else (``"12abc34"``, ``"1.2.3"``, ``"1,2,3"``, ``"nan"``)
+#: is rejected instead of being handed to ``float()``.
+_NUMBER_PATTERN = re.compile(r"[+-]?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)")
+
 
 def _is_missing(value: Any) -> bool:
     """True for ``None``/``NaN``/``NaT`` style missing scalars."""
@@ -98,7 +104,9 @@ def to_number(value: Any, *, field_name: str = "value") -> float:
     Coerce a source scalar into a finite float.
 
     Numbers and text numbers are accepted; thousands separators and currency
-    symbols (``"$1,234.50"``) are tolerated.
+    symbols (``"$1,234.50"``) are tolerated, but malformed values such as
+    ``"12abc34"``, ``"1.2.3"``, ``"1,2,3"`` or ``"nan"`` are rejected instead of
+    being silently coerced by ``float()``.
 
     Raises:
         ValidationError: If the value is missing, boolean or not numeric.
@@ -107,18 +115,37 @@ def to_number(value: Any, *, field_name: str = "value") -> float:
         raise ValidationError("Expected a number but got a boolean.", field=field_name, value=value)
     if isinstance(value, (int, float)):
         number = float(value)
-    else:
-        text = to_text(value)
-        if text is None:
-            raise ValidationError("Expected a number but the value is empty.", field=field_name, value=value)
-        cleaned = text
-        for symbol in _CURRENCY_SYMBOLS:
-            cleaned = cleaned.replace(symbol, "")
-        cleaned = cleaned.replace(",", "").strip()
-        try:
-            number = float(cleaned)
-        except ValueError as exc:
-            raise ValidationError(f"Expected a number but got '{text}'.", field=field_name, value=text) from exc
+        if math.isnan(number) or math.isinf(number):
+            raise ValidationError("Expected a finite number.", field=field_name, value=value)
+        return number
+    if _is_missing(value):
+        raise ValidationError("Expected a number but the value is empty.", field=field_name, value=value)
+
+    # Work on the raw text: ``to_text`` would collapse the strings "nan"/"inf"
+    # to ``None`` and hide that they are malformed numbers.
+    text = str(value).strip()
+    if not text:
+        raise ValidationError(
+            f"Cannot convert empty string to a number for {field_name}.",
+            field=field_name,
+            value=value,
+        )
+
+    cleaned = text
+    for symbol in _CURRENCY_SYMBOLS:
+        cleaned = cleaned.replace(symbol, "")
+    # Drop whitespace so "- $5,000.00" becomes "-5,000.00" before validation.
+    cleaned = re.sub(r"\s+", "", cleaned)
+
+    if not _NUMBER_PATTERN.fullmatch(cleaned):
+        raise ValidationError(
+            f"Expected a number but got '{text}'; the value could not be reliably converted "
+            "to a number.",
+            field=field_name,
+            value=text,
+        )
+
+    number = float(cleaned.replace(",", ""))
     if math.isnan(number) or math.isinf(number):
         raise ValidationError("Expected a finite number.", field=field_name, value=value)
     return number
