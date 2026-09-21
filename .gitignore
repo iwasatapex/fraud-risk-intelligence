@@ -1,5 +1,8 @@
 __pycache__/
 *.pyc
+.clinerules/
+.continue/
+.vscode/
 .conda-env/
 .pytest_cache/
 dataset/
